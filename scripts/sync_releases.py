@@ -135,6 +135,11 @@ def sync_codeberg():
     token = os.environ["CODEBERG_TOKEN"]
     repo = f"{os.environ['CODEBERG_OWNER']}/{os.environ['CODEBERG_BACKUP_REPO']}"
     base = f"{CODEBERG_API}/repos/{repo}"
+    # Forgejo makes the first pushed branch the default; match upstream instead.
+    want = request("GET", f"{GITHUB_API}/repos/{os.environ['UPSTREAM_REPO']}", os.environ.get("UPSTREAM_TOKEN"))["default_branch"]
+    if request("GET", base, token, scheme="token")["default_branch"] != want:
+        request("PATCH", base, token, scheme="token", data={"default_branch": want})
+        print(f"codeberg: default branch set to {want}")
     upstream, _ = upstream_releases()
     have = {r["tag_name"] for r in paginate(f"{base}/releases", token, scheme="token", per_page_key="limit", per_page=50)}
     created = 0

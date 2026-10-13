@@ -1,16 +1,19 @@
 #!/usr/bin/env bash
-# Push every upstream branch and tag from a bare clone to a backup remote.
+# Push the upstream default branch and every tag from a bare clone to a backup remote.
 #
-# Usage: sync-git.sh <bare-clone-dir> <remote-name> <remote-url>
+# Usage: sync-git.sh <bare-clone-dir> <remote-name> <remote-url> [--prune-other-branches]
 #
 # The backup never loses history:
-#   - refs deleted upstream are left alone in the backup;
+#   - tags deleted upstream are left alone in the backup;
 #   - when upstream force-pushes its default branch or moves a tag, the backup's
 #     old version is first saved under refs/{heads,tags}/backup-archive/<UTC time>/<name>.
-#     Other branches (feature branches get rebased all the time) are just overwritten.
+#
+# --prune-other-branches deletes backup branches other than the default branch
+# and backup-archive/*. Only for one-off cleanups: if upstream ever renames its
+# default branch, the old one would be deleted.
 set -euo pipefail
 
-mirror=$1 name=$2 url=$3
+mirror=$1 name=$2 url=$3 prune=${4:-}
 archive_prefix=backup-archive
 ts=$(date -u +%Y%m%dT%H%M%SZ)
 
@@ -26,19 +29,21 @@ git fetch --quiet --no-tags "$name" \
   "+refs/tags/*:refs/backup/$name/tags/*"
 
 archive=()
+delete=()
 while read -r ref old; do
   short=${ref#"refs/backup/$name/"}   # heads/<branch> or tags/<tag>
   kind=${short%%/*}
   rname=${short#*/}
   [[ $rname == "$archive_prefix"/* ]] && continue
+  if [[ $kind == heads && $rname != "$default_branch" ]]; then
+    [[ $prune == --prune-other-branches ]] && delete+=(":refs/heads/$rname")
+    continue
+  fi
   new=$(git rev-parse -q --verify "refs/$short" || true)
   # Deleted upstream (keep backup copy) or unchanged.
   [[ -z $new || $new == "$old" ]] && continue
-  if [[ $kind == heads ]]; then
-    [[ $rname != "$default_branch" ]] && continue
-    # Ordinary fast-forward.
-    git merge-base --is-ancestor "$old" "$new" 2>/dev/null && continue
-  fi
+  # Ordinary fast-forward of the default branch.
+  [[ $kind == heads ]] && git merge-base --is-ancestor "$old" "$new" 2>/dev/null && continue
   dest="refs/$kind/$archive_prefix/$ts/$rname"
   archive+=("$old:$dest")
   echo "::warning::$name: upstream rewrote $short; previous version kept at $dest"
@@ -48,5 +53,10 @@ if ((${#archive[@]})); then
   git push --quiet "$name" "${archive[@]}"
 fi
 
-git push --quiet --force "$name" 'refs/heads/*:refs/heads/*' 'refs/tags/*:refs/tags/*'
-echo "$name: pushed $(git for-each-ref refs/heads | wc -l) branches, $(git for-each-ref refs/tags | wc -l) tags"
+git push --quiet --force "$name" "refs/heads/$default_branch:refs/heads/$default_branch" 'refs/tags/*:refs/tags/*'
+echo "$name: pushed $default_branch and $(git for-each-ref refs/tags | wc -l) tags"
+
+if ((${#delete[@]})); then
+  git push --quiet "$name" "${delete[@]}"
+  echo "$name: deleted ${#delete[@]} other branches"
+fi

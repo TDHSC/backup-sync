@@ -11,8 +11,9 @@ listed in [`repos.json`](repos.json):
 }
 ```
 
-What gets copied: all branches, all tags, and every release (notes + assets).
-Nothing is ever deleted from the backups. If upstream force-pushes its default branch or
+What gets copied: the default branch, all tags, and every release (notes + assets).
+Other upstream branches are skipped. Nothing is ever deleted from the backups.
+If upstream force-pushes its default branch or
 moves a tag, the old version is kept under `backup-archive/<UTC time>/<name>`
 and a warning shows up in the workflow run. If upstream disappears, the run
 fails (GitHub emails you) and the backups stay as they are.

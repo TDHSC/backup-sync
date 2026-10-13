@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: "17 3 * * *"
   workflow_dispatch:
+    inputs:
+      prune_other_branches:
+        description: Delete backup branches other than the default branch (one-off cleanup)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -48,6 +53,7 @@ jobs:
       UPSTREAM_TOKEN: ${{ secrets.BACKUP_GITHUB_TOKEN }}
       BACKUP_GITHUB_TOKEN: ${{ secrets.BACKUP_GITHUB_TOKEN }}
       CODEBERG_TOKEN: ${{ secrets.CODEBERG_TOKEN }}
+      PRUNE: ${{ inputs.prune_other_branches && '--prune-other-branches' || '' }}
     steps:
       - uses: actions/checkout@v5
 
@@ -58,7 +64,7 @@ jobs:
       - name: GitHub backup - git
         id: gh_git
         if: ${{ !cancelled() && steps.clone.outcome == 'success' && matrix.repo.github }}
-        run: scripts/sync-git.sh upstream.git github "https://x-access-token:${BACKUP_GITHUB_TOKEN}@github.com/${GITHUB_BACKUP_REPO}.git"
+        run: scripts/sync-git.sh upstream.git github "https://x-access-token:${BACKUP_GITHUB_TOKEN}@github.com/${GITHUB_BACKUP_REPO}.git" $PRUNE
 
       - name: GitHub backup - releases
         if: ${{ !cancelled() && steps.gh_git.outcome == 'success' }}
@@ -72,7 +78,7 @@ jobs:
       - name: Codeberg backup - git
         id: cb_git
         if: ${{ !cancelled() && steps.cb_repo.outcome == 'success' }}
-        run: scripts/sync-git.sh upstream.git codeberg "https://${{ steps.cb_repo.outputs.owner }}:${CODEBERG_TOKEN}@codeberg.org/${{ steps.cb_repo.outputs.owner }}/${CODEBERG_BACKUP_REPO}.git"
+        run: scripts/sync-git.sh upstream.git codeberg "https://${{ steps.cb_repo.outputs.owner }}:${CODEBERG_TOKEN}@codeberg.org/${{ steps.cb_repo.outputs.owner }}/${CODEBERG_BACKUP_REPO}.git" $PRUNE
 
       - name: Codeberg backup - releases
         if: ${{ !cancelled() && steps.cb_git.outcome == 'success' }}

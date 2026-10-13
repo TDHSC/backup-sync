@@ -35,7 +35,7 @@ def request(method, url, token, scheme="Bearer", data=None, headers=None, raw=Fa
         with urllib.request.urlopen(req, timeout=300) as resp:
             body = resp.read()
     except urllib.error.HTTPError as e:
-        if e.code == 404:
+        if e.code == 404 and method == "GET":
             return None
         sys.exit(f"{method} {url} -> {e.code}: {e.read()[:500].decode(errors='replace')}")
     if raw:
@@ -137,9 +137,13 @@ def sync_codeberg():
     base = f"{CODEBERG_API}/repos/{repo}"
     # Forgejo makes the first pushed branch the default; match upstream instead.
     want = request("GET", f"{GITHUB_API}/repos/{os.environ['UPSTREAM_REPO']}", os.environ.get("UPSTREAM_TOKEN"))["default_branch"]
-    if request("GET", base, token, scheme="token")["default_branch"] != want:
+    current = request("GET", base, token, scheme="token")
+    if current["default_branch"] != want:
         request("PATCH", base, token, scheme="token", data={"default_branch": want})
         print(f"codeberg: default branch set to {want}")
+    if not current["has_releases"]:
+        request("PATCH", base, token, scheme="token", data={"has_releases": True})
+        print("codeberg: enabled releases")
     upstream, _ = upstream_releases()
     have = {r["tag_name"] for r in paginate(f"{base}/releases", token, scheme="token", per_page_key="limit", per_page=50)}
     created = 0

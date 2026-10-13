@@ -1,6 +1,6 @@
 # backup-sync
 
-Every 6 hours (and on manual dispatch) the workflow backs up each GitHub repo
+Once a day at 03:17 UTC (and on manual dispatch) the workflow backs up each GitHub repo
 listed in [`repos.json`](repos.json):
 
 ```json

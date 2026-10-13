@@ -9,6 +9,17 @@ permissions:
   contents: read
 
 jobs:
+  # GitHub disables scheduled workflows in public repos after 60 days without
+  # activity; re-enabling through the API resets that timer.
+  keepalive:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - run: gh api -X PUT "repos/$GITHUB_REPOSITORY/actions/workflows/sync.yml/enable"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
   plan:
     runs-on: ubuntu-latest
     outputs:

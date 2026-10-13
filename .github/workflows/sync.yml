@@ -1,0 +1,70 @@
+name: Sync backups
+
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      repos: ${{ steps.read.outputs.repos }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: read
+        run: echo "repos=$(jq -c . repos.json)" >> "$GITHUB_OUTPUT"
+
+  sync:
+    needs: plan
+    name: ${{ matrix.repo.upstream }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        repo: ${{ fromJSON(needs.plan.outputs.repos) }}
+    concurrency:
+      group: sync-${{ matrix.repo.upstream }}
+      cancel-in-progress: false
+    env:
+      UPSTREAM_REPO: ${{ matrix.repo.upstream }}
+      GITHUB_BACKUP_REPO: ${{ matrix.repo.github }}
+      CODEBERG_BACKUP_REPO: ${{ matrix.repo.codeberg }}
+      UPSTREAM_TOKEN: ${{ secrets.BACKUP_GITHUB_TOKEN }}
+      BACKUP_GITHUB_TOKEN: ${{ secrets.BACKUP_GITHUB_TOKEN }}
+      CODEBERG_TOKEN: ${{ secrets.CODEBERG_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Clone upstream
+        id: clone
+        run: git clone --bare --quiet "https://github.com/$UPSTREAM_REPO.git" upstream.git
+
+      - name: GitHub backup - git
+        id: gh_git
+        if: ${{ !cancelled() && steps.clone.outcome == 'success' && matrix.repo.github }}
+        run: scripts/sync-git.sh upstream.git github "https://x-access-token:${BACKUP_GITHUB_TOKEN}@github.com/${GITHUB_BACKUP_REPO}.git"
+
+      - name: GitHub backup - releases
+        if: ${{ !cancelled() && steps.gh_git.outcome == 'success' }}
+        run: python3 scripts/sync_releases.py github
+
+      - name: Codeberg backup - ensure repo
+        id: cb_repo
+        if: ${{ !cancelled() && steps.clone.outcome == 'success' && matrix.repo.codeberg && env.CODEBERG_TOKEN != '' }}
+        run: echo "owner=$(python3 scripts/sync_releases.py codeberg-ensure)" >> "$GITHUB_OUTPUT"
+
+      - name: Codeberg backup - git
+        id: cb_git
+        if: ${{ !cancelled() && steps.cb_repo.outcome == 'success' }}
+        run: scripts/sync-git.sh upstream.git codeberg "https://${{ steps.cb_repo.outputs.owner }}:${CODEBERG_TOKEN}@codeberg.org/${{ steps.cb_repo.outputs.owner }}/${CODEBERG_BACKUP_REPO}.git"
+
+      - name: Codeberg backup - releases
+        if: ${{ !cancelled() && steps.cb_git.outcome == 'success' }}
+        env:
+          CODEBERG_OWNER: ${{ steps.cb_repo.outputs.owner }}
+        run: python3 scripts/sync_releases.py codeberg

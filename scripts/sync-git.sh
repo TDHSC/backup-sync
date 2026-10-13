@@ -5,8 +5,9 @@
 #
 # The backup never loses history:
 #   - refs deleted upstream are left alone in the backup;
-#   - when upstream force-pushes a branch or moves a tag, the backup's old
-#     version is first saved under refs/{heads,tags}/backup-archive/<UTC time>/<name>.
+#   - when upstream force-pushes its default branch or moves a tag, the backup's
+#     old version is first saved under refs/{heads,tags}/backup-archive/<UTC time>/<name>.
+#     Other branches (feature branches get rebased all the time) are just overwritten.
 set -euo pipefail
 
 mirror=$1 name=$2 url=$3
@@ -14,6 +15,7 @@ archive_prefix=backup-archive
 ts=$(date -u +%Y%m%dT%H%M%SZ)
 
 cd "$mirror"
+default_branch=$(git symbolic-ref --short HEAD)
 git remote remove "$name" 2>/dev/null || true
 git remote add "$name" "$url"
 
@@ -32,9 +34,10 @@ while read -r ref old; do
   new=$(git rev-parse -q --verify "refs/$short" || true)
   # Deleted upstream (keep backup copy) or unchanged.
   [[ -z $new || $new == "$old" ]] && continue
-  # Ordinary fast-forward of a branch.
-  if [[ $kind == heads ]] && git merge-base --is-ancestor "$old" "$new" 2>/dev/null; then
-    continue
+  if [[ $kind == heads ]]; then
+    [[ $rname != "$default_branch" ]] && continue
+    # Ordinary fast-forward.
+    git merge-base --is-ancestor "$old" "$new" 2>/dev/null && continue
   fi
   dest="refs/$kind/$archive_prefix/$ts/$rname"
   archive+=("$old:$dest")

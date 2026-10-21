@@ -3,5 +3,10 @@
     "upstream": "morluto/rea",
     "github": "TDHSC/rea-backup",
     "codeberg": "rea-backup"
+  },
+  {
+    "upstream": "jtydhr88/ComfyTV",
+    "github": "TDHSC/ComfyTV-backup",
+    "codeberg": "ComfyTV-backup"
   }
 ]

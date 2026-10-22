@@ -8,5 +8,10 @@
     "upstream": "jtydhr88/ComfyTV",
     "github": "TDHSC/ComfyTV-backup",
     "codeberg": "ComfyTV-backup"
+  },
+  {
+    "upstream": "zsnmwy/ci-runner-platform",
+    "github": "TDHSC/ci-runner-platform-backup",
+    "codeberg": "ci-runner-platform-backup"
   }
 ]
